@@ -2,11 +2,11 @@ import { log } from "../deps.ts";
 import { UTF8_DECODER } from "../misc/mod.ts";
 import { DataFrame, FrameType } from "../proto/mod.ts";
 import { Connection } from "../transport/mod.ts";
-import { Binder, MessageLike, Sender, SocketType } from "../types.ts";
+import { Binder, Connector, MessageLike, Sender, SocketType } from "../types.ts";
 import { ServerSocket } from "./socket.ts";
 import { encodeMessages } from "./utils.ts";
 
-export interface Publisher extends Binder, Sender {
+export interface Publisher extends Binder, Sender, Connector {
 }
 
 export const create = (): Publisher => {
@@ -60,7 +60,10 @@ class PublisherImpl extends ServerSocket implements Publisher {
   async send(...messages: MessageLike[]): Promise<void> {
     const [topic] = messages;
 
-    const conns = this.findConns(topic);
+    let conns = this.findConns(topic);
+    // use known transport over connection if pre existing
+    // this is used when we use zmq.PUB and connect vs bind
+    if (this.transport) conns = [this.transport.conn];
     if (!conns) return;
 
     const b = encodeMessages(...messages);

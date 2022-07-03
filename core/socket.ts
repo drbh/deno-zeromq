@@ -28,7 +28,7 @@ import { ConnectionNotReadyError } from "../errors.ts";
 import { sendMessages } from "./utils.ts";
 
 export abstract class ServerSocket implements Binder {
-  #transport?: ServerTransport;
+  transport?: ServerTransport;
   protected conns: Set<Connection> = new Set();
 
   constructor(protected socketType: SocketType) {
@@ -84,15 +84,49 @@ export abstract class ServerSocket implements Binder {
   }
 
   async bind(addr: string): Promise<void> {
-    if (this.#transport) throw new Error("bind already!");
+    if (this.transport) throw new Error("bind already!");
     const tp = bind(addr);
-    this.#transport = tp;
+    this.transport = tp;
     await tp.bind();
     (async () => {
       for await (const conn of tp) {
         this.handleConn(conn);
       }
     })();
+  }
+
+  async connect(addr: string): Promise<void> {
+    if (this.transport) throw new Error("connect already!");
+    this.transport = connect(addr);
+    console.log("CONNECTING", addr)
+    const conn = await this.transport.connect();
+    await this.handshake(conn);
+  }
+
+  private async handshake(conn: Connection): Promise<void> {
+    // TODO: signature + major -> rest of greeting
+    await conn.write(Greeting.builder().build());
+    await conn.flush();
+
+    const greeting = await conn.readGreeting();
+    log.debug(`RCV: greeting=${greeting}`);
+
+    const first = await conn.read() as Frame;
+    if (first.type !== FrameType.Command) throw new Error("handshake failed!");
+
+    const cmd = new CommandFrame(first.bytes());
+    if (cmd.name !== CommandName.Ready) throw new Error("handshake failed!");
+
+    const ready = new ReadyCommandFrame(first.bytes());
+    log.debug(`RCV: ready=${ready}`);
+
+    const readyReply = ReadyCommandFrame.builder()
+      .set(METADATA_KEY_SOCKET_TYPE, this.socketType)
+      .set(METADATA_KEY_IDENTITY, "")
+      .build();
+    console.log(readyReply, this.socketType)
+    await conn.write(readyReply);
+    await conn.flush();
   }
 }
 
@@ -109,7 +143,9 @@ export class Socket implements Connector, Sender, Receiver {
   }
 
   async send(...msgs: MessageLike[]): Promise<void> {
+    console.log(this.transport)
     const conn = this.transport!.connected()!;
+    console.log(conn)
     await conn.write(Frame.EMPTY_HAS_MORE);
     await sendMessages(conn, ...msgs);
   }
