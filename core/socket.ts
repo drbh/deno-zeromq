@@ -98,7 +98,6 @@ export abstract class ServerSocket implements Binder {
   async connect(addr: string): Promise<void> {
     if (this.transport) throw new Error("connect already!");
     this.transport = connect(addr);
-    console.log("CONNECTING", addr)
     const conn = await this.transport.connect();
     await this.handshake(conn);
   }
@@ -124,7 +123,6 @@ export abstract class ServerSocket implements Binder {
       .set(METADATA_KEY_SOCKET_TYPE, this.socketType)
       .set(METADATA_KEY_IDENTITY, "")
       .build();
-    console.log(readyReply, this.socketType)
     await conn.write(readyReply);
     await conn.flush();
   }
@@ -143,9 +141,7 @@ export class Socket implements Connector, Sender, Receiver {
   }
 
   async send(...msgs: MessageLike[]): Promise<void> {
-    console.log(this.transport)
     const conn = this.transport!.connected()!;
-    console.log(conn)
     await conn.write(Frame.EMPTY_HAS_MORE);
     await sendMessages(conn, ...msgs);
   }
