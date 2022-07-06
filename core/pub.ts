@@ -63,7 +63,7 @@ class PublisherImpl extends ServerSocket implements Publisher {
     let conns = this.findConns(topic);
     // use known transport over connection if pre existing
     // this is used when we use zmq.PUB and connect vs bind
-    if (this.transport) conns = [this.transport.conn];
+    if (this.transport && !conns) conns = [this.transport.conn];
     if (!conns) return;
 
     const b = encodeMessages(...messages);
